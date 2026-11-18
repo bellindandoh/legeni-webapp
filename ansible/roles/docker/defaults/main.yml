@@ -1,0 +1,13 @@
+---
+# Utilisateur Linux autorisé à utiliser Docker sans sudo (celui qui lance Minikube)
+provision_user: "{{ lookup('ansible.builtin.env', 'USER') }}"
+
+docker_users:
+  - "{{ provision_user }}"
+
+docker_packages:
+  - docker-ce
+  - docker-ce-cli
+  - containerd.io
+  - docker-compose-plugin
+  - docker-buildx-plugin

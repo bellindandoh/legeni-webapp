@@ -1,0 +1,8 @@
+---
+k8s_namespace: legeni-prod
+app_env: prod
+app_color: "#2da44e"          # vide ("") = couleur par défaut de app.py
+app_replicas: 3
+app_node_port: 30082
+redis_password: "{{ vault_redis_password_prod }}"
+# readiness_path: /ready      # (démo soutenance, scénario 3) mettre /nope pour simuler un déploiement raté

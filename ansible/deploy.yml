@@ -1,0 +1,121 @@
+---
+# Lot 3 : déploie Legeni WebApp dans Kubernetes (namespace legeni-staging ou legeni-prod).
+#
+#   cd ansible
+#   ansible-playbook deploy.yml -e target_env=staging \
+#       -e app_image=<id_dockerhub>/legeni-webapp -e app_version=1.0.0-12 \
+#       --vault-password-file ../.vault_pass
+#
+# Déroulé : manifests -> attente de la fin du rolling update -> smoke test (version) ;
+# au moindre échec, retour à la révision précédente (block/rescue) puis échec explicite,
+# pour que le pipeline Jenkins passe au rouge.
+- name: Déploiement Kubernetes de Legeni WebApp
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    target_env: staging
+    app_image: "CHANGE_ME/legeni-webapp"      # surchargé par -e (Jenkins)
+    app_version: "dev"                        # surchargé par -e (Jenkins)
+    rollout_timeout: 180                      # secondes d'attente max du rolling update
+
+  pre_tasks:
+    - name: Vérifier l'environnement demandé
+      ansible.builtin.assert:
+        that:
+          - target_env in ['staging', 'prod']
+          - app_version != 'latest'
+        fail_msg: "target_env doit valoir staging ou prod, et la version ne peut pas être 'latest'"
+
+    - name: Charger les paramètres de l'environnement
+      ansible.builtin.include_vars: "vars/{{ target_env }}.yml"
+
+    - name: Charger les secrets chiffrés (Ansible Vault)
+      ansible.builtin.include_vars: vars/vault.yml
+      no_log: true
+
+    - name: Chercher un déploiement existant (pour savoir si un rollback est possible)
+      kubernetes.core.k8s_info:
+        api_version: apps/v1
+        kind: Deployment
+        name: webapp
+        namespace: "{{ k8s_namespace }}"
+      register: previous_deploy
+
+    - name: Mémoriser si une version précédente existe
+      ansible.builtin.set_fact:
+        previous_exists: "{{ previous_deploy.resources | length > 0 }}"
+
+  tasks:
+    - name: Créer le namespace
+      kubernetes.core.k8s:
+        state: present
+        template: k8s/namespace.yml.j2
+
+    - name: Créer le secret Redis (mot de passe issu du Vault)
+      kubernetes.core.k8s:
+        state: present
+        template: k8s/secret.yml.j2
+      no_log: true
+
+    - name: Déployer Redis et l'application, avec rollback automatique en cas d'échec
+      block:
+        - name: Appliquer Redis (StatefulSet + Service) et attendre qu'il soit prêt
+          kubernetes.core.k8s:
+            state: present
+            template: k8s/redis.yml.j2
+            wait: true
+            wait_timeout: "{{ rollout_timeout }}"
+
+        - name: Appliquer l'application et attendre la fin du rolling update
+          kubernetes.core.k8s:
+            state: present
+            template: k8s/webapp.yml.j2
+            wait: true
+            wait_timeout: "{{ rollout_timeout }}"
+
+        - name: Lister les pods de l'application en cours d'exécution
+          kubernetes.core.k8s_info:
+            kind: Pod
+            namespace: "{{ k8s_namespace }}"
+            label_selectors:
+              - app=webapp
+            field_selectors:
+              - status.phase=Running
+          register: running_pods
+          failed_when: running_pods.resources | length == 0
+
+        - name: "Smoke test : la version déployée est bien {{ app_version }}"
+          kubernetes.core.k8s_exec:
+            namespace: "{{ k8s_namespace }}"
+            pod: "{{ running_pods.resources[0].metadata.name }}"
+            command: >-
+              python -c "import json,urllib.request;
+              d=json.load(urllib.request.urlopen('http://webapp/api/info'));
+              assert d['version']=='{{ app_version }}', d; print(d['version'])"
+          register: smoke
+          changed_when: false
+          failed_when: smoke.rc != 0
+          retries: 5
+          delay: 3
+          until: smoke.rc == 0
+
+        - name: Résultat
+          ansible.builtin.debug:
+            msg: "{{ target_env }} OK : version {{ smoke.stdout | trim }} sur {{ app_replicas }} réplicas"
+
+      rescue:
+        - name: Retour à la révision précédente du Deployment
+          kubernetes.core.k8s_rollback:
+            api_version: apps/v1
+            kind: Deployment
+            name: webapp
+            namespace: "{{ k8s_namespace }}"
+          when: previous_exists | bool
+
+        - name: Échouer explicitement (le pipeline doit passer au rouge)
+          ansible.builtin.fail:
+            msg: >-
+              Déploiement de {{ app_version }} en {{ target_env }} échoué :
+              {{ 'rollback effectué' if previous_exists | bool else 'aucune version précédente à restaurer' }}

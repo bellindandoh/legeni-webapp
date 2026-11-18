@@ -1,0 +1,73 @@
+---
+- name: Installer le binaire minikube
+  ansible.builtin.get_url:
+    url: "{{ minikube_url }}"
+    dest: /usr/local/bin/minikube
+    mode: "0755"
+
+- name: Installer kubectl
+  ansible.builtin.get_url:
+    url: "{{ kubectl_url }}"
+    dest: /usr/local/bin/kubectl
+    mode: "0755"
+
+- name: Créer le dossier de travail du projet
+  ansible.builtin.file:
+    path: "{{ legeni_dir }}"
+    state: directory
+    owner: "{{ provision_user }}"
+    mode: "0750"
+
+# Les commandes minikube s'exécutent en tant que provision_user, pas en root.
+- name: Lire l'état de Minikube
+  ansible.builtin.command: minikube status --format={% raw %}'{{.Host}}'{% endraw %}
+  become_user: "{{ provision_user }}"
+  environment:
+    HOME: "{{ provision_home }}"
+  register: minikube_status
+  changed_when: false
+  failed_when: false
+
+- name: Démarrer Minikube (driver docker)
+  ansible.builtin.command: >-
+    minikube start --driver={{ minikube_driver }}
+    --cpus={{ minikube_cpus }} --memory={{ minikube_memory }}
+  become_user: "{{ provision_user }}"
+  environment:
+    HOME: "{{ provision_home }}"
+  when: "'Running' not in minikube_status.stdout"
+  changed_when: true
+
+- name: Lister les addons Minikube
+  ansible.builtin.command: minikube addons list -o json
+  become_user: "{{ provision_user }}"
+  environment:
+    HOME: "{{ provision_home }}"
+  register: minikube_addons_list
+  changed_when: false
+
+- name: Activer les addons manquants
+  ansible.builtin.command: "minikube addons enable {{ item }}"
+  become_user: "{{ provision_user }}"
+  environment:
+    HOME: "{{ provision_home }}"
+  loop: "{{ minikube_addons }}"
+  when: (minikube_addons_list.stdout | from_json)[item]['Status'] is not match('enabled')
+  changed_when: true
+
+- name: Exporter un kubeconfig autonome pour Jenkins
+  ansible.builtin.command: kubectl config view --flatten --minify --context minikube
+  become_user: "{{ provision_user }}"
+  environment:
+    HOME: "{{ provision_home }}"
+  register: kubeconfig_jenkins
+  changed_when: false
+  no_log: true
+
+- name: "Écrire kubeconfig-jenkins.yml (secret à déposer comme credential Jenkins)"
+  ansible.builtin.copy:
+    content: "{{ kubeconfig_jenkins.stdout }}\n"
+    dest: "{{ legeni_dir }}/kubeconfig-jenkins.yml"
+    owner: "{{ provision_user }}"
+    mode: "0600"
+  no_log: true

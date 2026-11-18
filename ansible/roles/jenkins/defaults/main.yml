@@ -1,0 +1,10 @@
+---
+jenkins_dir: /opt/jenkins
+jenkins_http_port: 8080
+jenkins_agent_port: 50000
+
+# DNS donnés au conteneur : évite « Could not resolve host: github.com » dans Jenkins
+# (problème rencontré avec Docker sous WSL2).
+jenkins_dns:
+  - 8.8.8.8
+  - 1.1.1.1

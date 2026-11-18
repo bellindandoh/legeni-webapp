@@ -1,0 +1,31 @@
+---
+# Lot 2 : installe Docker, Minikube et Jenkins sur une machine vierge (Ubuntu 24.04).
+#   cd ansible
+#   ansible-playbook provision.yml --ask-become-pass
+#   ansible-playbook provision.yml --ask-become-pass     # 2e passage : changed=0 attendu
+#
+# Sur un poste où Docker est déjà installé (Docker Desktop/WSL2) : --tags minikube,jenkins
+# Variables utiles (-e) : provision_user=<utilisateur Linux> minikube_cpus=2 minikube_memory=3072
+- name: Provisionner la machine CI/CD (Docker, Minikube, Jenkins)
+  hosts: legeni
+  become: true
+
+  roles:
+    - { role: docker, tags: [docker] }
+    - { role: minikube, tags: [minikube] }
+    - { role: jenkins, tags: [jenkins] }
+
+  post_tasks:
+    - name: Relier Jenkins au réseau Docker de Minikube (kubectl depuis Jenkins)
+      community.docker.docker_network:
+        name: minikube
+        connected:
+          - jenkins
+        appends: true
+
+    - name: Prochaines étapes
+      ansible.builtin.debug:
+        msg:
+          - "Jenkins : http://localhost:{{ jenkins_http_port }}"
+          - "Mot de passe initial : docker exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword"
+          - "Kubeconfig à déposer dans Jenkins (credential 'kubeconfig', type Secret file) : {{ legeni_dir }}/kubeconfig-jenkins.yml"

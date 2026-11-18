@@ -1,0 +1,17 @@
+# Secrets : ne jamais versionner
+.vault_pass
+*.vault_pass
+kubeconfig*.yml
+.env
+
+# Python / tests
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+reports/
+
+# Archives et fichiers temporaires
+*.tar.gz
+*.retry

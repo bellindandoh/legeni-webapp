@@ -1,0 +1,5 @@
+# MODÈLE : le vrai fichier vars/vault.yml est généré et chiffré par scripts/init-secrets.sh
+# (ne jamais commiter ce contenu en clair avec de vraies valeurs).
+---
+vault_redis_password_staging: "remplacé par init-secrets.sh"
+vault_redis_password_prod: "remplacé par init-secrets.sh"

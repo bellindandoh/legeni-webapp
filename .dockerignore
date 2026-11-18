@@ -1,0 +1,17 @@
+.git
+.gitignore
+.venv
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+reports/
+Jenkinsfile
+docker-compose*.yml
+ansible/
+docs/
+scripts/
+README.md
+VERSION
+.vault_pass
+*.tar.gz

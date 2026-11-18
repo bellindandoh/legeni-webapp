@@ -1,0 +1,22 @@
+# Fichier géré par Ansible (rôle jenkins) : ne pas modifier à la main.
+services:
+  jenkins:
+    build: .
+    image: legeni/jenkins:lts
+    container_name: jenkins
+    restart: unless-stopped
+    ports:
+      - "{{ jenkins_http_port }}:8080"
+      - "{{ jenkins_agent_port }}:50000"
+    dns:
+{% for server in jenkins_dns %}
+      - {{ server }}
+{% endfor %}
+    group_add:
+      - "${DOCKER_GID:?Définir DOCKER_GID dans .env}"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+
+volumes:
+  jenkins_home:

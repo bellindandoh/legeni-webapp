@@ -1,0 +1,18 @@
+---
+# Utilisateur Linux qui exécute Minikube (JAMAIS root avec le driver docker)
+provision_user: "{{ lookup('ansible.builtin.env', 'USER') }}"
+provision_home: "/home/{{ provision_user }}"
+
+minikube_url: https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+minikube_driver: docker
+minikube_cpus: 2
+minikube_memory: 3072          # en Mo
+minikube_addons:
+  - metrics-server
+  - ingress
+
+kubectl_version: v1.31.0
+kubectl_url: "https://dl.k8s.io/release/{{ kubectl_version }}/bin/linux/amd64/kubectl"
+
+# Dossier de travail du projet sur la machine (kubeconfig pour Jenkins, etc.)
+legeni_dir: /opt/legeni
